@@ -1,24 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Package, Search, Plus, Pencil, Loader2, X, Save, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
-import { supabase, type Product } from '@/lib/supabase';
+import { fetchInventory, createProduct, updateProduct } from '@/services/dbService';
 import { useToast } from '@/context/ToastContext';
 import { formatCurrency, formatNumber } from '@/lib/format';
 
 export function InventoryPage() {
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'all' | 'in' | 'low' | 'out'>('all');
-  const [editing, setEditing] = useState<Product | null>(null);
+  const [filter, setFilter] = useState('all');
+  const [editing, setEditing] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase.from('products').select('*').order('name');
-    if (error) toast('تعذّر تحميل المخزون', 'error');
-    setProducts((data as Product[]) || []);
-    setLoading(false);
+    try {
+      const data = await fetchInventory();
+      setProducts(data);
+    } catch (e) {
+      toast('تعذّر تحميل المخزون', 'error');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -29,19 +33,19 @@ export function InventoryPage() {
     const q = search.trim();
     return products.filter((p) => {
       const matchSearch = !q || p.name.includes(q) || (p.sku ?? '').includes(q) || p.category.includes(q);
-      const low = p.quantity <= (p.low_stock_threshold ?? 5);
+      const low = p.quantity <= p.low_stock_threshold;
       const matchFilter =
         filter === 'all' ? true :
-        filter === 'in' ? p.quantity > (p.low_stock_threshold ?? 5) :
+        filter === 'in' ? p.quantity > p.low_stock_threshold :
         filter === 'low' ? low && p.quantity > 0 :
         filter === 'out' ? p.quantity <= 0 : true;
       return matchSearch && matchFilter;
     });
   }, [products, search, filter]);
 
-  function statusOf(p: Product): { label: string; cls: string; icon: typeof CheckCircle2 } {
+  function statusOf(p) {
     if (p.quantity <= 0) return { label: 'نفد المخزون', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300', icon: XCircle };
-    if (p.quantity <= (p.low_stock_threshold ?? 5)) return { label: 'مخزون منخفض', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', icon: AlertTriangle };
+    if (p.quantity <= p.low_stock_threshold) return { label: 'مخزون منخفض', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300', icon: AlertTriangle };
     return { label: 'متوفر', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', icon: CheckCircle2 };
   }
 
@@ -52,9 +56,7 @@ export function InventoryPage() {
           <h1 className="text-2xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6 text-indigo-600" /> صفحة المخزن
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            عرض وتعديل المخزون لحظياً
-          </p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">عرض وتعديل المخزون لحظياً</p>
         </div>
         <button onClick={() => setShowAdd(true)} className="btn-primary">
           <Plus className="w-5 h-5" /> صنف جديد
@@ -68,12 +70,12 @@ export function InventoryPage() {
             <input className="input pr-10" placeholder="بحث عن صنف..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-            {([
+            {[
               ['all', 'الكل'],
               ['in', 'متوفر'],
               ['low', 'منخفض'],
               ['out', 'نفد'],
-            ] as const).map(([val, label]) => (
+            ].map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => setFilter(val)}
@@ -116,14 +118,10 @@ export function InventoryPage() {
                       <td className="py-3 px-3 text-slate-500">{formatCurrency(Number(p.cost_price))}</td>
                       <td className="py-3 px-3 font-semibold">{formatCurrency(Number(p.selling_price))}</td>
                       <td className="py-3 px-3">
-                        <span className={`badge ${st.cls}`}>
-                          <st.icon className="w-3.5 h-3.5" /> {st.label}
-                        </span>
+                        <span className={`badge ${st.cls}`}><st.icon className="w-3.5 h-3.5" /> {st.label}</span>
                       </td>
                       <td className="py-3 px-3">
-                        <button onClick={() => setEditing(p)} className="btn-ghost p-2">
-                          <Pencil className="w-4 h-4" />
-                        </button>
+                        <button onClick={() => setEditing(p)} className="btn-ghost p-2"><Pencil className="w-4 h-4" /></button>
                       </td>
                     </tr>
                   );
@@ -148,15 +146,7 @@ export function InventoryPage() {
   );
 }
 
-function ProductEditModal({
-  product,
-  onClose,
-  onSaved,
-}: {
-  product: Product | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
+function ProductEditModal({ product, onClose, onSaved }) {
   const { toast } = useToast();
   const isEdit = !!product;
   const [form, setForm] = useState({
@@ -177,37 +167,25 @@ function ProductEditModal({
     }
     setSaving(true);
     try {
+      const payload = {
+        name: form.name.trim(),
+        sku: form.sku.trim() || 'SKU-' + Date.now(),
+        category: form.category.trim() || 'عام',
+        quantity: Number(form.quantity),
+        cost_price: Number(form.cost_price),
+        selling_price: Number(form.selling_price),
+        low_stock_threshold: Number(form.low_stock_threshold),
+      };
       if (isEdit && product) {
-        const { error } = await supabase
-          .from('products')
-          .update({
-            name: form.name.trim(),
-            sku: form.sku.trim() || null,
-            category: form.category.trim() || 'عام',
-            quantity: Number(form.quantity),
-            cost_price: Number(form.cost_price),
-            selling_price: Number(form.selling_price),
-            low_stock_threshold: Number(form.low_stock_threshold),
-          })
-          .eq('id', product.id);
-        if (error) throw error;
+        await updateProduct(product.id, payload);
         toast('تم تحديث الصنف', 'success');
       } else {
-        const { error } = await supabase.from('products').insert({
-          name: form.name.trim(),
-          sku: form.sku.trim() || null,
-          category: form.category.trim() || 'عام',
-          quantity: Number(form.quantity),
-          cost_price: Number(form.cost_price),
-          selling_price: Number(form.selling_price),
-          low_stock_threshold: Number(form.low_stock_threshold),
-        });
-        if (error) throw error;
+        await createProduct(payload);
         toast('تمت إضافة الصنف', 'success');
       }
       onSaved();
     } catch (e) {
-      toast((e as Error).message, 'error');
+      toast('تعذّر الحفظ: ' + e.message, 'error');
     } finally {
       setSaving(false);
     }

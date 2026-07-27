@@ -5,16 +5,16 @@ import { ToastProvider } from '@/context/ToastContext';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute, AdminRoute } from '@/components/ProtectedRoute';
 import { AuthPage } from '@/pages/AuthPage';
-import { DashboardPage } from '@/pages/DashboardPage';
+import { AdminPanel } from '@/pages/AdminPanel';
 import { PurchasesPage } from '@/pages/PurchasesPage';
 import { SalesPage } from '@/pages/SalesPage';
 import { InventoryPage } from '@/pages/InventoryPage';
 import { InvoicesPage } from '@/pages/InvoicesPage';
 
 function RootRedirect() {
-  const { session, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
   if (loading) return null;
-  if (!session) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   return <Navigate to={isAdmin ? '/admin' : '/sales'} replace />;
 }
 
@@ -33,7 +33,7 @@ export default function App() {
                 element={
                   <AdminRoute>
                     <AppShell>
-                      <DashboardPage />
+                      <AdminPanel />
                     </AppShell>
                   </AdminRoute>
                 }

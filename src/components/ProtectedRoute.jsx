@@ -1,9 +1,8 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import type { ReactNode } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading } = useAuth();
+export function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -14,15 +13,15 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!session) {
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  return <>{children}</>;
+  return children;
 }
 
-export function AdminRoute({ children }: { children: ReactNode }) {
-  const { session, isAdmin, loading } = useAuth();
+export function AdminRoute({ children }) {
+  const { user, isAdmin, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -33,7 +32,7 @@ export function AdminRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!session) {
+  if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -41,5 +40,5 @@ export function AdminRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/sales" replace />;
   }
 
-  return <>{children}</>;
+  return children;
 }

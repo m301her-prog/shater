@@ -1,17 +1,19 @@
-export function formatCurrency(value: number): string {
+export function formatCurrency(value) {
   const num = Number(value) || 0;
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'decimal',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(num) + ' ر.س';
+  return (
+    new Intl.NumberFormat('ar-EG', {
+      style: 'decimal',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num) + ' ر.س'
+  );
 }
 
-export function formatNumber(value: number): string {
+export function formatNumber(value) {
   return new Intl.NumberFormat('ar-EG').format(Number(value) || 0);
 }
 
-export function formatDate(value: string): string {
+export function formatDate(value) {
   try {
     return new Intl.DateTimeFormat('ar-EG', {
       year: 'numeric',
@@ -25,7 +27,7 @@ export function formatDate(value: string): string {
   }
 }
 
-export function formatDateShort(value: string): string {
+export function formatDateShort(value) {
   try {
     return new Intl.DateTimeFormat('ar-EG', {
       year: 'numeric',

@@ -1,16 +1,9 @@
 import { useRef } from 'react';
 import { Printer, X, Store } from 'lucide-react';
-import type { InvoiceWithItems } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/format';
 
-export function InvoiceModal({
-  invoice,
-  onClose,
-}: {
-  invoice: InvoiceWithItems;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
+export function InvoiceModal({ invoice, onClose }) {
+  const ref = useRef(null);
 
   function handlePrint() {
     const content = ref.current;
@@ -87,7 +80,7 @@ export function InvoiceModal({
           <tbody>
             {invoice.items.map((it) => (
               <tr key={it.id} className="border-b border-slate-100 dark:border-slate-800">
-                <td className="p-2">{it.product?.name ?? '—'}</td>
+                <td className="p-2">{it.product_name || it.product?.name || '—'}</td>
                 <td className="p-2">{it.quantity}</td>
                 <td className="p-2">{formatCurrency(Number(it.unit_price))}</td>
                 <td className="p-2 text-left font-semibold">{formatCurrency(Number(it.subtotal))}</td>

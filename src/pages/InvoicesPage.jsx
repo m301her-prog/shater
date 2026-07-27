@@ -1,31 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileText, Search, Loader2, X, ArrowRightLeft } from 'lucide-react';
-import { supabase, type Invoice, type InvoiceWithItems, type Product } from '@/lib/supabase';
+import { fetchInvoices, fetchInvoiceItems } from '@/services/dbService';
 import { useToast } from '@/context/ToastContext';
 import { formatCurrency, formatDateShort } from '@/lib/format';
 import { InvoiceModal } from '@/components/InvoiceModal';
 
 export function InvoicesPage() {
   const { toast } = useToast();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'PURCHASE' | 'SALE'>('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [selected, setSelected] = useState<InvoiceWithItems | null>(null);
+  const [selected, setSelected] = useState(null);
+  const [opening, setOpening] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const [{ data: invs, error: invErr }, { data: prods }] = await Promise.all([
-          supabase.from('invoices').select('*').order('created_at', { ascending: false }),
-          supabase.from('products').select('*'),
-        ]);
-        if (invErr) throw invErr;
-        setInvoices((invs as Invoice[]) || []);
-        setProducts((prods as Product[]) || []);
+        const data = await fetchInvoices();
+        setInvoices(data);
       } catch (e) {
         toast('تعذّر تحميل الفواتير', 'error');
       } finally {
@@ -45,20 +40,15 @@ export function InvoicesPage() {
     });
   }, [invoices, typeFilter, search, dateFrom, dateTo]);
 
-  async function openInvoice(inv: Invoice) {
+  async function openInvoice(inv) {
+    setOpening(true);
     try {
-      const { data: items, error } = await supabase
-        .from('invoice_items')
-        .select('*')
-        .eq('invoice_id', inv.id);
-      if (error) throw error;
-      const itemsWithProducts = (items as any[]).map((it) => ({
-        ...it,
-        product: products.find((p) => p.id === it.product_id),
-      }));
-      setSelected({ ...inv, items: itemsWithProducts });
+      const items = await fetchInvoiceItems(inv.id);
+      setSelected({ ...inv, items });
     } catch (e) {
       toast('تعذّر فتح الفاتورة', 'error');
+    } finally {
+      setOpening(false);
     }
   }
 
@@ -68,9 +58,7 @@ export function InvoicesPage() {
         <h1 className="text-2xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
           <FileText className="w-6 h-6 text-indigo-600" /> صفحة الفواتير
         </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          سجل جميع فواتير المشتريات والمبيعات
-        </p>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">سجل جميع فواتير المشتريات والمبيعات</p>
       </div>
 
       <div className="card p-5">
@@ -81,11 +69,11 @@ export function InvoicesPage() {
             <input className="input pr-10" placeholder="رقم الفاتورة..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
-            {([
+            {[
               ['all', 'الكل'],
               ['PURCHASE', 'المشتريات'],
               ['SALE', 'المبيعات'],
-            ] as const).map(([val, label]) => (
+            ].map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => setTypeFilter(val)}
@@ -116,7 +104,6 @@ export function InvoicesPage() {
                   <th className="py-3 px-3 font-semibold">النوع</th>
                   <th className="py-3 px-3 font-semibold">التاريخ</th>
                   <th className="py-3 px-3 font-semibold">الإجمالي</th>
-                  <th className="py-3 px-3 font-semibold">الضريبة</th>
                   <th className="py-3 px-3 font-semibold">عرض</th>
                 </tr>
               </thead>
@@ -131,16 +118,15 @@ export function InvoicesPage() {
                     </td>
                     <td className="py-3 px-3 text-slate-500">{formatDateShort(inv.created_at)}</td>
                     <td className="py-3 px-3 font-bold">{formatCurrency(Number(inv.total_amount))}</td>
-                    <td className="py-3 px-3 text-slate-500">{formatCurrency(Number(inv.tax_amount))}</td>
                     <td className="py-3 px-3">
-                      <button onClick={() => openInvoice(inv)} className="btn-ghost p-2">
-                        <ArrowRightLeft className="w-4 h-4" />
+                      <button onClick={() => openInvoice(inv)} disabled={opening} className="btn-ghost p-2">
+                        {opening ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
                       </button>
                     </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="text-center text-slate-400 py-8">لا توجد فواتير مطابقة</td></tr>
+                  <tr><td colSpan={5} className="text-center text-slate-400 py-8">لا توجد فواتير مطابقة</td></tr>
                 )}
               </tbody>
             </table>

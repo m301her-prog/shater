@@ -26,12 +26,14 @@ const navItems = [
   { to: '/invoices', label: 'الفواتير', icon: FileText },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const { profile, signOut, isAdmin } = useAuth();
+export function AppShell({ children }) {
+  const { user, isAdmin, signOut } = useAuth();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [online, setOnline] = useState(navigator.onLine);
+  const [online, setOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -80,9 +82,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="p-3 border-t border-slate-200 dark:border-slate-800">
           <div className="px-3 py-2 mb-2">
             <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">
-              {profile?.full_name || 'مستخدم'}
+              {user?.full_name || 'مستخدم'}
             </div>
-            <div className="text-xs text-slate-400 truncate">{profile?.email}</div>
+            <div className="text-xs text-slate-400 truncate">{user?.email}</div>
             <div className="mt-1.5">
               <span className="badge bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
                 {isAdmin ? 'مدير' : 'مستخدم'}
@@ -144,8 +146,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
             <div className="p-3 border-t border-slate-200 dark:border-slate-800">
               <div className="px-3 py-2 mb-2">
-                <div className="text-sm font-semibold truncate">{profile?.full_name}</div>
-                <div className="text-xs text-slate-400 truncate">{profile?.email}</div>
+                <div className="text-sm font-semibold truncate">{user?.full_name}</div>
+                <div className="text-xs text-slate-400 truncate">{user?.email}</div>
               </div>
               <button onClick={handleSignOut} className="btn-ghost w-full justify-start text-rose-600 dark:text-rose-400">
                 <LogOut className="w-5 h-5" />

@@ -1,42 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Receipt, Search, Plus, Minus, Trash2, Loader2, ShoppingCart, CheckCircle2, X } from 'lucide-react';
-import { supabase, type Product, type InvoiceWithItems } from '@/lib/supabase';
+import { fetchInventory, processSalesInvoice } from '@/services/dbService';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { InvoiceModal } from '@/components/InvoiceModal';
 
-type CartLine = {
-  product: Product;
-  quantity: number;
-};
-
 export function SalesPage() {
+  const { user } = useAuth();
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cart, setCart] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-  const [lastInvoice, setLastInvoice] = useState<InvoiceWithItems | null>(null);
+  const [lastInvoice, setLastInvoice] = useState(null);
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from('products').select('*').order('name');
-      if (error) toast('تعذّر تحميل المنتجات', 'error');
-      setProducts((data as Product[]) || []);
-      setLoading(false);
+      try {
+        const data = await fetchInventory();
+        setProducts(data);
+      } catch (e) {
+        toast('تعذّر تحميل المنتجات', 'error');
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim();
     if (!q) return products;
-    return products.filter(
-      (p) => p.name.includes(q) || (p.sku ?? '').includes(q) || p.category.includes(q)
-    );
+    return products.filter((p) => p.name.includes(q) || (p.sku ?? '').includes(q) || p.category.includes(q));
   }, [products, search]);
 
-  function addToCart(p: Product) {
+  function addToCart(p) {
     if (p.quantity <= 0) {
       toast('هذا الصنف غير متوفر في المخزون', 'error');
       return;
@@ -54,7 +53,7 @@ export function SalesPage() {
     });
   }
 
-  function setQty(productId: string, qty: number) {
+  function setQty(productId, qty) {
     setCart((c) =>
       c.map((x) => {
         if (x.product.id !== productId) return x;
@@ -63,7 +62,7 @@ export function SalesPage() {
       })
     );
   }
-  function removeLine(productId: string) {
+  function removeLine(productId) {
     setCart((c) => c.filter((x) => x.product.id !== productId));
   }
   function clearCart() {
@@ -71,7 +70,7 @@ export function SalesPage() {
   }
 
   const subtotal = cart.reduce((s, l) => s + l.quantity * Number(l.product.selling_price), 0);
-  const tax = Math.round(subtotal * 0.15 * 100) / 100; // 15% VAT
+  const tax = Math.round(subtotal * 0.15 * 100) / 100;
   const total = subtotal + tax;
 
   async function handleCheckout() {
@@ -81,50 +80,38 @@ export function SalesPage() {
     }
     setSubmitting(true);
     try {
-      const { data: inv, error: invErr } = await supabase
-        .from('invoices')
-        .insert({
-          type: 'SALE',
-          total_amount: total,
-          tax_amount: tax,
-        })
-        .select()
-        .single();
-      if (invErr) throw invErr;
-
       const items = cart.map((l) => ({
-        invoice_id: (inv as { id: string }).id,
         product_id: l.product.id,
         quantity: l.quantity,
         unit_price: Number(l.product.selling_price),
         subtotal: l.quantity * Number(l.product.selling_price),
       }));
-      const { error: itemsErr } = await supabase.from('invoice_items').insert(items);
-      if (itemsErr) throw itemsErr;
-
-      // Build invoice preview object
-      const built: InvoiceWithItems = {
-        ...(inv as InvoiceWithItems),
+      const invoice = await processSalesInvoice({
+        items,
+        total_amount: total,
+        created_by: user?.id,
+      });
+      const built = {
+        ...invoice,
+        tax_amount: tax,
         items: cart.map((l) => ({
           id: l.product.id,
-          invoice_id: (inv as { id: string }).id,
+          invoice_id: invoice.id,
           product_id: l.product.id,
           quantity: l.quantity,
           unit_price: Number(l.product.selling_price),
           subtotal: l.quantity * Number(l.product.selling_price),
-          product: l.product,
+          product_name: l.product.name,
+          product_sku: l.product.sku,
         })),
       };
-
       toast('تمت عملية البيع بنجاح', 'success');
       setLastInvoice(built);
       clearCart();
-
-      // refresh products to reflect new stock
-      const { data: refreshed } = await supabase.from('products').select('*').order('name');
-      setProducts((refreshed as Product[]) || []);
+      const refreshed = await fetchInventory();
+      setProducts(refreshed);
     } catch (e) {
-      toast((e as Error).message || 'تعذّر إتمام البيع', 'error');
+      toast('تعذّر إتمام البيع: ' + e.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -136,9 +123,7 @@ export function SalesPage() {
         <h1 className="text-2xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
           <Receipt className="w-6 h-6 text-indigo-600" /> صفحة المبيعات
         </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          نقطة بيع سريعة — اختر الأصناف وأتمم البيع
-        </p>
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">نقطة بيع سريعة — اختر الأصناف وأتمم البيع</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -146,12 +131,7 @@ export function SalesPage() {
         <div className="lg:col-span-2 card p-5">
           <div className="relative mb-4">
             <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              className="input pr-10"
-              placeholder="بحث بالاسم أو الرمز..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <input className="input pr-10" placeholder="بحث بالاسم أو الرمز..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           {loading ? (
             <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>
@@ -159,7 +139,7 @@ export function SalesPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
               {filtered.map((p) => {
                 const out = p.quantity <= 0;
-                const low = p.quantity <= (p.low_stock_threshold ?? 5) && !out;
+                const low = p.quantity <= p.low_stock_threshold && !out;
                 return (
                   <button
                     key={p.id}
@@ -183,9 +163,7 @@ export function SalesPage() {
                     </div>
                     <div className="font-semibold text-sm leading-tight mb-1 line-clamp-2 h-9">{p.name}</div>
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">
-                        {formatCurrency(Number(p.selling_price))}
-                      </span>
+                      <span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">{formatCurrency(Number(p.selling_price))}</span>
                       <span className="text-xs text-slate-400">×{p.quantity}</span>
                     </div>
                   </button>
@@ -220,17 +198,11 @@ export function SalesPage() {
                     <div className="text-xs text-slate-400">{formatCurrency(Number(l.product.selling_price))}</div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => setQty(l.product.id, l.quantity - 1)} className="btn-ghost p-1.5">
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
+                    <button onClick={() => setQty(l.product.id, l.quantity - 1)} className="btn-ghost p-1.5"><Minus className="w-3.5 h-3.5" /></button>
                     <span className="w-8 text-center text-sm font-bold">{l.quantity}</span>
-                    <button onClick={() => setQty(l.product.id, l.quantity + 1)} className="btn-ghost p-1.5">
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
+                    <button onClick={() => setQty(l.product.id, l.quantity + 1)} className="btn-ghost p-1.5"><Plus className="w-3.5 h-3.5" /></button>
                   </div>
-                  <button onClick={() => removeLine(l.product.id)} className="btn-ghost p-1.5 text-rose-600">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <button onClick={() => removeLine(l.product.id)} className="btn-ghost p-1.5 text-rose-600"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               ))
             )}

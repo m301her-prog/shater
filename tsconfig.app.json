@@ -13,6 +13,8 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
 
     /* Path alias — depth-invariant imports for src (@/foo === src/foo from any file) */
     "baseUrl": ".",
@@ -21,7 +23,7 @@
     },
 
     /* Linting */
-    "strict": true,
+    "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true

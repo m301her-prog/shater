@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Store, Mail, Lock, User as UserIcon, Loader2, Moon, Sun } from 'lucide-react';
+import { Store, Mail, Lock, User as UserIcon, Loader2, Moon, Sun, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useToast } from '@/context/ToastContext';
@@ -11,37 +11,37 @@ export function AuthPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/sales';
+  const from = location.state?.from?.pathname || '/sales';
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingMsg, setPendingMsg] = useState('');
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
+    setPendingMsg('');
     try {
       if (mode === 'login') {
-        const { error } = await signIn(email.trim(), password);
-        if (error) {
-          toast(error, 'error');
+        const res = await signIn(email.trim(), password);
+        if (res.error) {
+          if (res.pending) setPendingMsg(res.error);
+          else toast(res.error, 'error');
         } else {
           toast('مرحباً بك في شاطر', 'success');
           navigate(from, { replace: true });
         }
       } else {
-        if (password.length < 6) {
-          toast('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error');
-          return;
-        }
-        const { error } = await signUp(email.trim(), password, fullName.trim() || 'مستخدم جديد');
-        if (error) {
-          toast(error, 'error');
+        const res = await signUp({ full_name: fullName.trim(), email: email.trim(), password });
+        if (res.error) {
+          toast(res.error, 'error');
         } else {
-          toast('تم إنشاء الحساب بنجاح', 'success');
-          navigate(from, { replace: true });
+          toast('تم إنشاء الحساب. بانتظار تفعيل المدير.', 'success');
+          setMode('login');
+          setPendingMsg('حسابك بانتظار تفعيل المدير. سجّل الدخول بعد التفعيل.');
         }
       }
     } finally {
@@ -88,11 +88,7 @@ export function AuthPage() {
 
       {/* Form panel */}
       <div className="lg:w-1/2 flex items-center justify-center p-6 lg:p-12 relative">
-        <button
-          onClick={toggle}
-          className="absolute top-4 left-4 btn-ghost p-2"
-          aria-label="تبديل الوضع"
-        >
+        <button onClick={toggle} className="absolute top-4 left-4 btn-ghost p-2" aria-label="تبديل الوضع">
           {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
         </button>
         <div className="w-full max-w-md">
@@ -128,6 +124,13 @@ export function AuthPage() {
               حساب جديد
             </button>
           </div>
+
+          {pendingMsg && (
+            <div className="mb-4 flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
+              <Clock className="w-5 h-5 shrink-0 mt-0.5" />
+              <span>{pendingMsg}</span>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
@@ -200,7 +203,7 @@ export function AuthPage() {
           </div>
 
           <div className="mt-6 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300">
-            لتجربة حساب المدير: سجّل بالبريد <span dir="ltr" className="font-mono font-bold">admin@shatir.com</span> (يُمنح صلاحية المدير تلقائياً).
+            لتجربة حساب المدير: سجّل بالبريد <span dir="ltr" className="font-mono font-bold">admin@shatir.com</span> وكلمة المرور <span dir="ltr" className="font-mono font-bold">admin123</span>. الحسابات الجديدة تنتظر تفعيل المدير.
           </div>
         </div>
       </div>
