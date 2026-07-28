@@ -1,10 +1,10 @@
-import bcrypt from 'bcryptjs'; // استخدام bcryptjs المتوافق مع Vercel
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'shatir_secret_key_123';
 
-// 1. تسجيل الدخول
+// 1. دالة تسجيل الدخول
 export const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -16,7 +16,7 @@ export const login = async (req, res) => {
 
     const user = result.rows[0];
     
-    // التحقق من كلمة المرور عبر bcryptjs
+    // التحقق من كلمة المرور
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       return res.status(401).json({ message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });
@@ -29,15 +29,12 @@ export const login = async (req, res) => {
       { expiresIn: '12h' }
     );
 
-    // حفظ الجلسة داخل HTTP-Only Cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 12 * 60 * 60 * 1000 // 12 ساعة
-    });
+    // حفظ الجلسة داخل Cookie
+    res.setHeader('Set-Cookie', `token=${token}; HttpOnly; Path=/; Max-Age=43200; ${process.env.NODE_ENV === 'production' ? 'Secure;' : ''}`);
 
-    return res.json({
+    return res.status(200).json({
       message: 'تم تسجيل الدخول بنجاح',
+      token,
       user: { id: user.id, name: user.full_name, email: user.email, role: user.role }
     });
   } catch (error) {
@@ -45,7 +42,7 @@ export const login = async (req, res) => {
   }
 };
 
-// 2. Middleware للتحقق من الجلسة (الحماية)
+// 2. Middleware للتحقق من الجلسة
 export const authenticate = (req, res, next) => {
   const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
   
@@ -55,9 +52,18 @@ export const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // تخزين بيانات المستخدم في الطلب
+    req.user = decoded;
     next();
   } catch (err) {
     return res.status(403).json({ message: 'الجلسة منتهية، يرجى إعادة تسجيل الدخول' });
   }
 };
+
+// 3. Vercel Serverless Default Handler (المشغّل الرئيسي المطلوب لـ Vercel)
+export default async function handler(req, res) {
+  if (req.method === 'POST') {
+    return await login(req, res);
+  } else {
+    return res.status(405).json({ message: 'Method Not Allowed' });
+  }
+}
