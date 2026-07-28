@@ -55,6 +55,61 @@
 }
 .animate-fadein { animation: fadein 0.25s ease; }
 
+/* Staggered card mount: fade-in + slide-up, triggered with inline animation-delay */
+@keyframes cardMount {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card-mount {
+  opacity: 0;
+  animation: cardMount 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Hover lift + glow — applied on stat cards */
+.stat-card {
+  @apply transition-all duration-300 ease-out;
+}
+.stat-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 32px -8px rgba(79, 70, 229, 0.18), 0 4px 12px -4px rgba(0,0,0,0.08);
+}
+.stat-card:active {
+  transform: translateY(-2px) scale(0.98);
+}
+
+/* Section card hover — glow border */
+.section-card {
+  @apply transition-all duration-300 ease-out;
+}
+.section-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px -12px rgba(79, 70, 229, 0.22);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+/* Success checkmark pop */
+@keyframes successPop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.success-pop { animation: successPop 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Payment card select pop */
+@keyframes paySelect {
+  from { transform: scale(0.96); }
+  to   { transform: scale(1); }
+}
+.pay-select { animation: paySelect 0.2s ease; }
+
+/* Number ticker subtle pulse */
+@keyframes valuePulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+.value-pulse { animation: valuePulse 0.3s ease; }
+
 /* scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
