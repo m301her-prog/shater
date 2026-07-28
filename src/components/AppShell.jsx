@@ -13,12 +13,14 @@ import {
   Sun,
   Wifi,
   WifiOff,
+  Home,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Logo } from '@/components/Logo';
 
 const navItems = [
+  { to: '/home', label: 'الرئيسية', icon: Home, end: true },
   { to: '/admin', label: 'لوحة التحكم', icon: LayoutDashboard, adminOnly: true, end: true },
   { to: '/purchases', label: 'المشتريات', icon: ShoppingCart },
   { to: '/sales', label: 'المبيعات', icon: Receipt },

@@ -10,12 +10,13 @@ import { PurchasesPage } from '@/pages/PurchasesPage';
 import { SalesPage } from '@/pages/SalesPage';
 import { InventoryPage } from '@/pages/InventoryPage';
 import { InvoicesPage } from '@/pages/InvoicesPage';
+import { LauncherPage } from '@/pages/LauncherPage';
 
 function RootRedirect() {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={isAdmin ? '/admin' : '/sales'} replace />;
+  return <Navigate to="/home" replace />;
 }
 
 export default function App() {
@@ -27,6 +28,14 @@ export default function App() {
             <Routes>
               <Route path="/" element={<RootRedirect />} />
               <Route path="/login" element={<AuthPage />} />
+              <Route
+                path="/home"
+                element={
+                  <ProtectedRoute>
+                    <LauncherPage />
+                  </ProtectedRoute>
+                }
+              />
 
               <Route
                 path="/admin"
