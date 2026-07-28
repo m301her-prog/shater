@@ -1,22 +1,24 @@
-// neonClient.js — Neon Serverless PostgreSQL connection.
+// neonClient.js — Neon Serverless PostgreSQL connection & Vercel API Client
 //
-// Uses @neondatabase/serverless to run queries over HTTP/WebSocket fetch.
-//
-// CONNECTION CONFIG:
-//   Set VITE_NEON_CONNECTION_STRING in .env to your Neon connection string, e.g.
-//   VITE_NEON_CONNECTION_STRING=postgres://user:pass@ep-xxx.region.aws.neon.tech/shatir?sslmode=require
-//
-// NOTE ON THIS ENVIRONMENT:
-//   This sandbox provisions a Supabase Postgres instance (Neon tooling is not
-//   available here). When no Neon connection string is present, neonClient falls
-//   back to the Supabase REST (PostgREST) endpoint using the anon key so the app
-//   keeps working end-to-end. The SQL schema in /schema.sql is identical on both.
+// Uses @capacitor/core (CapacitorHttp) for HTTP requests to bypass CORS on mobile devices.
+// Connects to Vercel API endpoints:
+// - Auth: https://shater-9th8.vercel.app/api/authController
+// - Invoices: https://shater-9th8.vercel.app/api/invoicesController
+// - Products: https://shater-9th8.vercel.app/api/productsController
 
+import { CapacitorHttp } from '@capacitor/core';
 import { neon } from '@neondatabase/serverless';
 
 const NEON_CS = import.meta.env.VITE_NEON_CONNECTION_STRING;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Vercel API Endpoint URLs
+export const API_URLS = {
+  AUTH: 'https://shater-9th8.vercel.app/api/authController',
+  INVOICES: 'https://shater-9th8.vercel.app/api/invoicesController',
+  PRODUCTS: 'https://shater-9th8.vercel.app/api/productsController',
+};
 
 export const hasNeon = Boolean(NEON_CS);
 export const hasFallback = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -46,6 +48,86 @@ export async function query(text, params = []) {
 }
 
 /**
+ * Helper function using CapacitorHttp for external requests
+ */
+async function capHttpRequest(options) {
+  const response = await CapacitorHttp.request(options);
+  if (response.status < 200 || response.status >= 300) {
+    const errorData = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+    throw new Error(`HTTP ${options.method} failed (${response.status}): ${errorData}`);
+  }
+  return response.data;
+}
+
+// ==========================================
+// 1. Auth Services (Login / Session)
+// ==========================================
+export async function loginUser(credentials) {
+  return await capHttpRequest({
+    method: 'POST',
+    url: API_URLS.AUTH,
+    headers: { 'Content-Type': 'application/json' },
+    data: credentials,
+  });
+}
+
+// ==========================================
+// 2. Invoices Services (Fetch & Save Invoices)
+// ==========================================
+export async function getInvoices(token) {
+  return await capHttpRequest({
+    method: 'GET',
+    url: API_URLS.INVOICES,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+  });
+}
+
+export async function createInvoice(invoiceData, token) {
+  return await capHttpRequest({
+    method: 'POST',
+    url: API_URLS.INVOICES,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+    data: invoiceData,
+  });
+}
+
+// ==========================================
+// 3. Products Services (Fetch & Save Products)
+// ==========================================
+export async function getProducts(token) {
+  return await capHttpRequest({
+    method: 'GET',
+    url: API_URLS.PRODUCTS,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+  });
+}
+
+export async function createProduct(productData, token) {
+  return await capHttpRequest({
+    method: 'POST',
+    url: API_URLS.PRODUCTS,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: token ? `Bearer ${token}` : '',
+    },
+    data: productData,
+  });
+}
+
+// ==========================================
+// Fallback RPC & Rest Methods (Supabase)
+// ==========================================
+
+/**
  * Run a PostgREST RPC function (used by the Supabase fallback path).
  * @param {string} fn - function name in the public schema
  * @param {object} args - arguments object
@@ -54,20 +136,16 @@ export async function query(text, params = []) {
 export async function rpc(fn, args = {}) {
   if (!hasFallback) throw new Error('No database fallback configured.');
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fn}`;
-  const res = await fetch(url, {
+  return await capHttpRequest({
     method: 'POST',
+    url,
     headers: {
       'Content-Type': 'application/json',
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
     },
-    body: JSON.stringify(args),
+    data: args,
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`RPC ${fn} failed (${res.status}): ${body}`);
-  }
-  return res.json();
 }
 
 /**
@@ -87,17 +165,14 @@ export async function restSelect(table, opts = {}) {
       url += `&${encodeURIComponent(f.col)}=${encodeURIComponent(f.op + '.' + f.val)}`;
     }
   }
-  const res = await fetch(url, {
+  return await capHttpRequest({
+    method: 'GET',
+    url,
     headers: {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
     },
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`select ${table} failed (${res.status}): ${body}`);
-  }
-  return res.json();
 }
 
 /**
@@ -105,21 +180,18 @@ export async function restSelect(table, opts = {}) {
  */
 export async function restInsert(table, rows) {
   if (!hasFallback) throw new Error('No database fallback configured.');
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const url = `${SUPABASE_URL}/rest/v1/${table}`;
+  return await capHttpRequest({
     method: 'POST',
+    url,
     headers: {
       'Content-Type': 'application/json',
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       Prefer: 'return=representation',
     },
-    body: JSON.stringify(rows),
+    data: rows,
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`insert ${table} failed (${res.status}): ${body}`);
-  }
-  return res.json();
 }
 
 /**
@@ -131,19 +203,15 @@ export async function restUpdate(table, filters, patch) {
   for (const f of filters) {
     url += (url.includes('?') ? '&' : '?') + `${encodeURIComponent(f.col)}=${encodeURIComponent(f.op + '.' + f.val)}`;
   }
-  const res = await fetch(url, {
+  return await capHttpRequest({
     method: 'PATCH',
+    url,
     headers: {
       'Content-Type': 'application/json',
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       Prefer: 'return=representation',
     },
-    body: JSON.stringify(patch),
+    data: patch,
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`update ${table} failed (${res.status}): ${body}`);
-  }
-  return res.json();
 }
