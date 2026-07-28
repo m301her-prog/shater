@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs'; // استخدام bcryptjs المتوافق مع Vercel
 import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 
@@ -11,13 +11,12 @@ export const login = async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
-      // تم تصحيح القوس هنا res.status(401)
       return res.status(401).json({ message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });
     }
 
     const user = result.rows[0];
     
-    // التحقق من كلمة المرور
+    // التحقق من كلمة المرور عبر bcryptjs
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
       return res.status(401).json({ message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' });
