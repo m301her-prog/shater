@@ -1,117 +1,109 @@
-import { useNavigate } from 'react-router-dom';
-import {
-  ShoppingCart,
-  Receipt,
-  Package,
-  FileText,
-  LayoutDashboard,
-  ChevronLeft,
-  Store,
-  Sparkles,
-} from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ThemeProvider } from '@/context/ThemeContext';
+import { ToastProvider } from '@/context/ToastContext';
+import { AppShell } from '@/components/AppShell';
+import { ProtectedRoute, AdminRoute } from '@/components/ProtectedRoute';
+import { AuthPage } from '@/pages/AuthPage';
+import { AdminPanel } from '@/pages/AdminPanel';
+import { PurchasesPage } from '@/pages/PurchasesPage';
+import { SalesPage } from '@/pages/SalesPage';
+import { InventoryPage } from '@/pages/InventoryPage';
+import { InvoicesPage } from '@/pages/InvoicesPage';
+import { LauncherPage } from '@/pages/LauncherPage';
 
-const tiles = [
-  {
-    title: 'لوحة التحكم',
-    desc: 'نظرة عامة وإدارة المستخدمين',
-    icon: LayoutDashboard,
-    to: '/admin',
-    gradient: 'from-indigo-500 to-blue-600',
-    glow: 'rgba(79, 70, 229, 0.25)',
-    adminOnly: true,
-  },
-  {
-    title: 'المبيعات',
-    desc: 'نقطة بيع سريعة وإصدار فواتير',
-    icon: Receipt,
-    to: '/sales',
-    gradient: 'from-emerald-500 to-teal-600',
-    glow: 'rgba(16, 185, 129, 0.25)',
-  },
-  {
-    title: 'المشتريات',
-    desc: 'تسجيل فواتير الموردين',
-    icon: ShoppingCart,
-    to: '/purchases',
-    gradient: 'from-blue-500 to-indigo-600',
-    glow: 'rgba(59, 130, 246, 0.25)',
-  },
-  {
-    title: 'المخزن',
-    desc: 'إدارة الأصناف والكميات',
-    icon: Package,
-    to: '/inventory',
-    gradient: 'from-amber-500 to-orange-600',
-    glow: 'rgba(245, 158, 11, 0.25)',
-  },
-  {
-    title: 'الفواتير',
-    desc: 'سجل جميع المعاملات',
-    icon: FileText,
-    to: '/invoices',
-    gradient: 'from-violet-500 to-purple-600',
-    glow: 'rgba(139, 92, 246, 0.25)',
-  },
-];
+function RootRedirect() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  // إذا لم يكن مسجلاً للدخول، يفتح على صفحة الدخول/إنشاء الحساب
+  if (!user) return <Navigate to="/login" replace />;
+  // بعد تسجيل الدخول مباشرة، يفتح على لوحة التحكم الرئيسية (LauncherPage)
+  return <Navigate to="/home" replace />;
+}
 
-export function LauncherPage() {
-  const navigate = useNavigate();
-  const { isAdmin, user } = useAuth();
-
-  const visible = tiles.filter((t) => !t.adminOnly || isAdmin);
-
+export default function App() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950/30">
-      {/* Header */}
-      <div className="max-w-5xl mx-auto px-6 pt-12 pb-8 text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-500 shadow-lg shadow-indigo-500/30 mb-4 card-mount">
-          <Store className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-3xl font-extrabold text-slate-800 dark:text-white card-mount" style={{ animationDelay: '60ms' }}>
-          شاطر
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-2 card-mount" style={{ animationDelay: '120ms' }}>
-          مرحباً {user?.full_name || ''} — اختر القسم للبدء
-        </p>
-      </div>
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* التوجيه الرئيسي عند فتح التطبيق */}
+              <Route path="/" element={<RootRedirect />} />
+              
+              {/* صفحة تسجيل الدخول / إنشاء الحساب */}
+              <Route path="/login" element={<AuthPage />} />
 
-      {/* Icon grid */}
-      <div className="max-w-5xl mx-auto px-6 pb-16">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-          {visible.map((t, i) => (
-            <button
-              key={t.to}
-              onClick={() => navigate(t.to)}
-              style={{ animationDelay: `${160 + i * 90}ms` }}
-              className="group relative card p-6 text-center card-mount overflow-hidden transition-all duration-300 hover:-translate-y-2 hover:shadow-xl active:scale-95"
-            >
-              {/* glow blob */}
-              <div
-                className="absolute -top-10 -left-10 w-28 h-28 rounded-full opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-500"
-                style={{ background: t.glow }}
+              {/* لوحة التحكم الرئيسية للتطبيق (LauncherPage) */}
+              <Route
+                path="/home"
+                element={
+                  <ProtectedRoute>
+                    <LauncherPage />
+                  </ProtectedRoute>
+                }
               />
-              {/* gradient accent top */}
-              <div className={`absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-l ${t.gradient} opacity-50 group-hover:opacity-100 transition-opacity`} />
 
-              <div className="relative flex flex-col items-center gap-3">
-                <div
-                  className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${t.gradient} flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}
-                >
-                  <t.icon className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 dark:text-white">{t.title}</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{t.desc}</p>
-                </div>
-                <div className="flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 group-hover:gap-2 transition-all duration-300">
-                  فتح <ChevronLeft className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+              {/* صفحة الأدمن (خاصة بالحسابات التي تملك صلاحية الأدمن فقط) */}
+              <Route
+                path="/admin"
+                element={
+                  <AdminRoute>
+                    <AppShell>
+                      <AdminPanel />
+                    </AppShell>
+                  </AdminRoute>
+                }
+              />
+
+              {/* بقية الصفحات والموديلات */}
+              <Route
+                path="/purchases"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <PurchasesPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sales"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <SalesPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/inventory"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <InventoryPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/invoices"
+                element={
+                  <ProtectedRoute>
+                    <AppShell>
+                      <InvoicesPage />
+                    </AppShell>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* إعادة توجيه أي مسار غير معروف إلى الصفحة الرئيسية */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
